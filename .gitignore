@@ -1,2 +1,5 @@
-todo_save.json
 __pycache__/
+*.pyc
+todo.db
+todo_save.json
+.env

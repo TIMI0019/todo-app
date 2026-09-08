@@ -1,0 +1,269 @@
+:root {
+  --bg: #f6f3ee;
+  --panel: #ffffff;
+  --sidebar: #efe9de;
+  --text: #2c2a26;
+  --text-muted: #7a766c;
+  --border: #e3ddd0;
+  --accent: #3b6d8f;
+  --accent-text: #ffffff;
+  --done-bg: #dcefe0;
+  --done-text: #1f6b3a;
+  --pending-bg: #fbe9d0;
+  --pending-text: #93591a;
+  --note-bg: #ede4f7;
+  --note-text: #5a3c8a;
+}
+
+[data-theme="dark"] {
+  --bg: #1c1b19;
+  --panel: #262421;
+  --sidebar: #201f1c;
+  --text: #ece8e0;
+  --text-muted: #a39c8f;
+  --border: #3a3733;
+  --accent: #6ea8cc;
+  --accent-text: #14202a;
+  --done-bg: #16352380;
+  --done-text: #7fd39a;
+  --pending-bg: #3a2a1080;
+  --pending-text: #e0ac5f;
+  --note-bg: #2c204080;
+  --note-text: #c6a9f2;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 190px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar h1 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 18px 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.nav-item:hover { background: var(--border); }
+
+.nav-item.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.theme-toggle {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--panel);
+}
+
+main {
+  flex: 1;
+  padding: 2rem 2.5rem;
+}
+
+.panel {
+  display: none;
+}
+
+.panel.active {
+  display: block;
+}
+
+.add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.bulk-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+button.danger {
+  background: transparent;
+  color: var(--pending-text);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+button.danger:hover {
+  background: var(--pending-bg);
+}
+
+input[type="text"] {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+}
+
+button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+
+li.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--pending-bg);
+  color: var(--pending-text);
+}
+
+li.item.done {
+  background: var(--done-bg);
+  color: var(--done-text);
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+
+li.item span { flex: 1; font-size: 14px; }
+
+li.item .select-check { opacity: 0.5; }
+li.item .select-check:checked { opacity: 1; }
+
+li.item .delete { cursor: pointer; opacity: 0.6; font-size: 13px; margin-left: 4px; }
+li.item .delete:hover { opacity: 1; }
+
+.note-card {
+  position: relative;
+  background: var(--note-bg);
+  color: var(--note-text);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.note-card .title {
+  font-weight: 600;
+  font-size: 15px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.note-card .content {
+  font-size: 13px;
+  margin: 8px 0 0;
+  display: none;
+}
+
+.note-card.expanded .content {
+  display: block;
+}
+
+.note-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.note-actions .select-check { opacity: 0.5; }
+.note-actions .select-check:checked { opacity: 1; }
+
+.note-card .delete {
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.note-card .delete:hover { opacity: 1; }
+
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.cal-header button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+
+.cal-grid .day-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+}
+
+.cal-grid .day-cell {
+  padding: 10px 0;
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.cal-grid .day-cell.empty {
+  border: none;
+  background: transparent;
+}
+
+.cal-grid .day-cell.today {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}

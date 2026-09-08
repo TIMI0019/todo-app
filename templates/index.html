@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>My To-Do App</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="sidebar">
+  <h1>My to-dos</h1>
+  <div class="nav-item active" data-target="tasks-panel">Tasks</div>
+  <div class="nav-item" data-target="notes-panel">Notes</div>
+  <div class="nav-item" data-target="calendar-panel">Calendar</div>
+  <div class="nav-item" data-target="profile-panel">Profile</div>
+  <div class="theme-toggle" id="themeToggle">
+    <span>Dark mode</span>
+    <span id="themeState">Off</span>
+  </div>
+</div>
+
+<main>
+
+  <section class="panel active" id="tasks-panel">
+    <div class="add-row">
+      <input type="text" id="taskInput" placeholder="Add a task">
+      <button id="addTaskBtn">Add</button>
+    </div>
+    <div class="bulk-row">
+      <button id="deleteSelectedTasks" class="danger">Delete selected</button>
+    </div>
+    <ul id="taskList"></ul>
+  </section>
+
+  <section class="panel" id="notes-panel">
+    <div class="add-row">
+      <input type="text" id="noteTitleInput" placeholder="Note title">
+      <input type="text" id="noteContentInput" placeholder="Note content">
+      <button id="addNoteBtn">Add</button>
+    </div>
+    <div class="bulk-row">
+      <button id="deleteSelectedNotes" class="danger">Delete selected</button>
+    </div>
+    <div id="noteList"></div>
+  </section>
+
+  <section class="panel" id="calendar-panel">
+    <div class="cal-header">
+      <button id="prevMonth">&larr; Prev</button>
+      <span id="calLabel">September 2026</span>
+      <button id="nextMonth">Next &rarr;</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+  </section>
+
+  <section class="panel" id="profile-panel">
+    <div class="note-card" style="max-width:320px;">
+      <p class="title">{{ username }}</p>
+      <p class="content">Logged in</p>
+    </div>
+    <a href="{{ url_for('logout') }}">
+      <button class="danger" style="margin-top:1rem;">Log out</button>
+    </a>
+  </section>
+
+</main>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

@@ -2,9 +2,10 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, s
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 import datetime
+import os
 
 app = Flask(__name__)
-app.secret_key = "change-this-to-something-random-and-secret"
+app.secret_key = os.environ.get("SECRET_KEY", "dev-fallback-key")
 
 DB_FILE = "todo.db"
 

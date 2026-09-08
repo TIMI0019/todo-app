@@ -9,16 +9,21 @@ navItems.forEach(item => {
   });
 });
 
+
+// this is where we handle the dark mode toggle functionality. When the user clicks the theme toggle button, we check the current theme and switch it accordingly. We also update the theme state text to reflect the current theme.
+
+
+
 const themeToggle = document.getElementById('themeToggle');
 const themeState = document.getElementById('themeState');
 themeToggle.addEventListener('click', () => {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   if (isDark) {
     document.documentElement.removeAttribute('data-theme');
-    themeState.textContent = 'Off';
+    themeState.textContent = '☀️';
   } else {
     document.documentElement.setAttribute('data-theme', 'dark');
-    themeState.textContent = 'On';
+    themeState.textContent = '🌙';
   }
 });
 

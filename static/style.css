@@ -82,15 +82,25 @@ body {
 .theme-toggle {
   margin-top: auto;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  /* align-items: start; */
+  justify-content: left;
+  /* justify-content: space-between; */
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  /* border: 1px solid var(--border); */
   border-radius: 8px;
   font-size: 13px;
   cursor: pointer;
-  background: var(--panel);
+  /* background: var(--panel); */
 }
+
+
+.theme-icon {
+display: flex;
+align-items: start;
+justify-content: left;
+}
+
+
 
 main {
   flex: 1;
@@ -109,6 +119,17 @@ main {
   display: flex;
   gap: 8px;
   margin-bottom: 0.75rem;
+}
+
+.note-content-input{
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
 }
 
 .bulk-row {
@@ -130,6 +151,17 @@ button.danger:hover {
 }
 
 input[type="text"] {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+}
+
+
+input[type="password"] {
   flex: 1;
   padding: 10px 12px;
   border-radius: 8px;
@@ -266,4 +298,165 @@ li.item .delete:hover { opacity: 1; }
   background: var(--accent);
   color: var(--accent-text);
   font-weight: 600;
+}
+
+.brand-logo{
+  width: 150px;
+}
+
+
+
+
+
+/* Stack inputs vertically */
+.note-add-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+/* Ensure the textarea matches full width and styles */
+.note-content-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical; /* allows user to expand height, but not width */
+  min-height: 80px;
+}
+
+/* Align button nicely underneath */
+.note-add-container button {
+  align-self: flex-start;
+}
+
+
+
+
+
+
+
+
+
+/* ---------- Mobile responsive ---------- */
+@media (max-width: 640px) {
+  body {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0.5rem;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    order: 2;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    gap: 0;
+  }
+
+  .sidebar{
+    display: flex;
+    flex-direction: column;
+
+    width: 100%;
+  }
+
+
+  /* .theme-toggle {
+    display
+  } */
+
+  .nav-item {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 11px;
+    padding: 6px 10px;
+    text-align: center;
+  }
+
+  main {
+    order: 1;
+    padding: 1rem;
+    padding-bottom: 5rem;
+    width: 100%;
+  }
+
+  .add-row {
+    flex-wrap: wrap;
+  }
+
+  .add-row input[type="text"] {
+    min-width: 100%;
+  }
+
+  .add-row button {
+    width: 100%;
+  }
+
+  li.item {
+    flex-wrap: wrap;
+  }
+
+  .cal-grid {
+    gap: 2px;
+  }
+
+  .cal-grid .day-cell {
+    padding: 8px 0;
+    font-size: 12px;
+  }
+
+.brand-logo{
+  width: 150px;
+}
+
+.login-logo{
+  width: 150px;
+  display: block;
+  margin: 0 auto 20px auto;
+}
+
+
+.brand{
+  width: auto;
+  justify-content: center;
+}
+
+.navigation{
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+}
+
+.note-card.expanded .content {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: break-word; 
+  word-break: break-word;
+  
+
+}
+
+.note-content-input{
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+}
+
+
 }

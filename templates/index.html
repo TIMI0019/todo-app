@@ -2,20 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>My To-Do App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doneify</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
 <div class="sidebar">
-  <h1>My to-dos</h1>
+  <div class="brand">
+    <img src="{{ url_for('static', filename='images/JOSH.png') }}" alt="Logo" class="brand-logo">
+  
+  </div>
+
+
+  <div class="navigation">
   <div class="nav-item active" data-target="tasks-panel">Tasks</div>
   <div class="nav-item" data-target="notes-panel">Notes</div>
   <div class="nav-item" data-target="calendar-panel">Calendar</div>
   <div class="nav-item" data-target="profile-panel">Profile</div>
   <div class="theme-toggle" id="themeToggle">
-    <span>Dark mode</span>
-    <span id="themeState">Off</span>
+    <span> </span>
+    <span id="themeState" class="theme-icon">☀️</span>
+
+  </div>
   </div>
 </div>
 
@@ -33,11 +42,18 @@
   </section>
 
   <section class="panel" id="notes-panel">
-    <div class="add-row">
-      <input type="text" id="noteTitleInput" placeholder="Note title">
-      <input type="text" id="noteContentInput" placeholder="Note content">
-      <button id="addNoteBtn">Add</button>
+    <div class="note-add-container">
+  <input type="text" id="noteTitleInput" placeholder="Note Title">
+  <textarea id="noteContentInput" class="note-content-input" placeholder="Note Content..." rows="4"></textarea>
+  <button id="addNoteBtn">Add Note</button>
+</div>
+
+    <div>
+
+
+      
     </div>
+
     <div class="bulk-row">
       <button id="deleteSelectedNotes" class="danger">Delete selected</button>
     </div>

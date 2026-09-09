@@ -30,6 +30,7 @@
   }
   .auth-box button { width: 100%; }
   .auth-error { color: var(--pending-text); font-size: 13px; margin-bottom: 12px; }
+  .auth-success { color: #4CAF50; font-size: 13px; margin-bottom: 12px; }
   .auth-link { font-size: 13px; margin-top: 12px; color: var(--text-muted); }
   .auth-link a { color: var(--accent); }
 
@@ -40,26 +41,22 @@
     height: auto;
   }
 
-  .password-field { position:  relative; }
+  .password-field { position: relative; }
   .password-field input { padding-right: 42px; }
   .password-toggle {
     position: absolute;
-    left: 200px;
-    top: 15px;
-    left: 100px;
-    height: 10px;
-    padding: 0;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
     background: none !important;
     border: none;
     box-shadow: none;
     cursor: pointer;
     color: var(--text-muted);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 4px 6px;
-    b
-
+    font-size: 14px;
+    padding: 0;
+    width: auto;
+    height: auto;
   }
 
   .remember-row {
@@ -80,15 +77,27 @@
     <img src="{{ url_for('static', filename='images/JOSH.png') }}" alt="Logo" class="login-logo">
 
     <h1 style="text-align: center;">Log in</h1>
+
+    <!-- Display flashed success messages (e.g. Password reset successful) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <p class="auth-success">{{ message }}</p>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Display login error messages -->
     {% if error %}
       <p class="auth-error">{{ error }}</p>
     {% endif %}
+
     <form method="POST">
       <input type="text" name="username" placeholder="Username" required>
 
       <div class="password-field">
         <input type="password" name="password" id="password" placeholder="Password" required>
-        <button type="button" class="password-toggle" data-target="password"><i class="fa-regular fa-eye-slash"></i></button>
+        <button type="button" class="password-toggle" data-target="password"><i class="fa-regular fa-eye"></i></button>
       </div>
 
       <label class="remember-row">
@@ -98,6 +107,7 @@
 
       <button type="submit">Log in</button>
     </form>
+
     <p class="auth-link">No account yet? <a href="{{ url_for('signup') }}">Sign up</a></p>
     <p class="auth-link"><a href="{{ url_for('forgot_password') }}">Forgot password?</a></p>
   </div>
@@ -109,10 +119,10 @@
       const input = document.getElementById(btn.dataset.target);
       if (input.type === 'password') {
         input.type = 'text';
-     btn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+        btn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
       } else {
         input.type = 'password';
-         btn.innerHTML = '<i class="fa-regular fa-eye"></i>';
+        btn.innerHTML = '<i class="fa-regular fa-eye"></i>';
       }
     });
   });

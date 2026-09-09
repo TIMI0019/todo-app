@@ -1,25 +1,60 @@
-from flask import Flask, render_template, jsonify, request, redirect, url_for, session
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import datetime
 import os
 import re
 import secrets
-import resend  # Resend SDK for transactional emails
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # --- App Setup ---
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-fallback-key")
 app.permanent_session_lifetime = datetime.timedelta(days=30)
 
-# Configure Resend API Key
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-resend.api_key = RESEND_API_KEY
+# Environment variables for database and Gmail SMTP
+DATABASE_URL = os.environ.get("DATABASE_URL")
+MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
+MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
 
 DB_FILE = "todo.db"
 
 
 # --- Helper Functions ---
+def send_otp_email(to_email, otp):
+    """Sends an OTP email using Gmail SMTP."""
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        print("--- [LOG] WARNING: MAIL_USERNAME or MAIL_PASSWORD not set in environment! ---", flush=True)
+        return False
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Your Doneify Password Reset Code"
+    msg["From"] = f"Doneify <{MAIL_USERNAME}>"
+    msg["To"] = to_email
+
+    html_content = f"""
+        <h3>Password Reset Request</h3>
+        <p>Your 6-digit verification code is: <strong style="font-size: 20px;">{otp}</strong></p>
+        <p>This code will expire in 10 minutes.</p>
+    """
+    msg.attach(MIMEText(html_content, "html"))
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(MAIL_USERNAME, MAIL_PASSWORD)
+            server.sendmail(MAIL_USERNAME, [to_email], msg.as_string())
+        print(f"--- [LOG] Gmail SMTP Success! Code sent to: {to_email} ---", flush=True)
+        return True
+    except Exception as e:
+        print(f"--- [LOG] Gmail SMTP Error: {e} ---", flush=True)
+        return False
+
+
 def is_password_strong(password):
     """At least 8 chars, one uppercase, one lowercase, one digit, one special character."""
     if len(password) < 8:
@@ -36,60 +71,97 @@ def is_password_strong(password):
 
 
 def get_db():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if DATABASE_URL:
+        # PostgreSQL for Render production
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        return conn
+    else:
+        # SQLite for local development
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 
 def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
+    if DATABASE_URL:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                email VARCHAR(255),
+                phone VARCHAR(50),
+                otp VARCHAR(10),
+                otp_expiry VARCHAR(100)
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tasks (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                description TEXT NOT NULL,
+                done INTEGER NOT NULL
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notes (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                title VARCHAR(255) NOT NULL,
+                content TEXT,
+                date VARCHAR(50),
+                time VARCHAR(50)
+            );
+        """)
+        conn.commit()
+        conn.close()
+    else:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            )
+        """)
+        columns_to_add = [
+            ("email", "TEXT"),
+            ("phone", "TEXT"),
+            ("otp", "TEXT"),
+            ("otp_expiry", "TEXT")
+        ]
+        for col_name, col_type in columns_to_add:
+            try:
+                cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+            except sqlite3.OperationalError:
+                pass
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
-        )
-    """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                done INTEGER NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        """)
 
-    # Safely add optional/newer columns
-    columns_to_add = [
-        ("email", "TEXT"),
-        ("phone", "TEXT"),
-        ("otp", "TEXT"),
-        ("otp_expiry", "TEXT")
-    ]
-    for col_name, col_type in columns_to_add:
-        try:
-            cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            description TEXT NOT NULL,
-            done INTEGER NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            content TEXT,
-            date TEXT,
-            time TEXT,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    """)
-
-    conn.commit()
-    conn.close()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT,
+                date TEXT,
+                time TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        """)
+        conn.commit()
+        conn.close()
 
 
 init_db()
@@ -125,16 +197,23 @@ def signup():
         conn = get_db()
         cursor = conn.cursor()
         try:
-            cursor.execute(
-                "INSERT INTO users (username, password, email, phone) VALUES (?, ?, ?, ?)",
-                (username, hashed_password, email, phone)
-            )
+            if DATABASE_URL:
+                cursor.execute(
+                    "INSERT INTO users (username, password, email, phone) VALUES (%s, %s, %s, %s) RETURNING id",
+                    (username, hashed_password, email, phone)
+                )
+                new_user_id = cursor.fetchone()["id"]
+            else:
+                cursor.execute(
+                    "INSERT INTO users (username, password, email, phone) VALUES (?, ?, ?, ?)",
+                    (username, hashed_password, email, phone)
+                )
+                new_user_id = cursor.lastrowid
             conn.commit()
-        except sqlite3.IntegrityError:
+        except Exception:
             conn.close()
             return render_template("signup.html", error="That username is already taken.")
 
-        new_user_id = cursor.lastrowid
         conn.close()
 
         session["user_id"] = new_user_id
@@ -153,7 +232,9 @@ def login():
 
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+        
+        query = "SELECT * FROM users WHERE username = %s" if DATABASE_URL else "SELECT * FROM users WHERE username = ?"
+        cursor.execute(query, (username,))
         user = cursor.fetchone()
         conn.close()
 
@@ -168,29 +249,24 @@ def login():
     return render_template("login.html")
 
 
-# Step 1: Render Request Page
 @app.route("/forgot-password", methods=["GET"])
 def forgot_password():
     return render_template("forgot_password.html", step="request")
 
 
-# Step 1 Handler: Generate & Send OTP Email
 @app.route("/request-otp", methods=["POST"])
 def request_otp():
     email = request.form.get("email", "").strip()
     print(f"\n--- [LOG] Reset request received for email: '{email}' ---", flush=True)
 
     if not email:
-        print("--- [LOG] Error: Email parameter missing ---", flush=True)
         return render_template("forgot_password.html", step="request", error="Email is required.")
-
-    # Verify if RESEND_API_KEY is configured
-    if not RESEND_API_KEY:
-        print("--- [LOG] WARNING: RESEND_API_KEY is not set in environment variables! ---", flush=True)
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    
+    query = "SELECT * FROM users WHERE email = %s" if DATABASE_URL else "SELECT * FROM users WHERE email = ?"
+    cursor.execute(query, (email,))
     user = cursor.fetchone()
 
     if not user:
@@ -198,38 +274,21 @@ def request_otp():
     else:
         print(f"--- [LOG] DB Check: Found user '{user['username']}' (ID: {user['id']}) ---", flush=True)
         
-        # Generate 6-digit numeric OTP and set 10-minute expiry
         otp = f"{secrets.randbelow(1000000):06d}"
         expiry = (datetime.datetime.now() + datetime.timedelta(minutes=10)).isoformat()
 
-        cursor.execute("UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?", (otp, expiry, user["id"]))
+        update_query = "UPDATE users SET otp = %s, otp_expiry = %s WHERE id = %s" if DATABASE_URL else "UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?"
+        cursor.execute(update_query, (otp, expiry, user["id"]))
         conn.commit()
         print(f"--- [LOG] Generated OTP: {otp} | Expiry: {expiry} ---", flush=True)
 
-        # Send Email via Resend
-        print(f"--- [LOG] Sending email to '{email}' via Resend API... ---", flush=True)
-        try:
-            res = resend.Emails.send({
-                "from": "onboarding@resend.dev",
-                "to": [email],
-                "subject": "Your Doneify Password Reset Code",
-                "html": f"""
-                    <h3>Password Reset Request</h3>
-                    <p>Your 6-digit verification code is: <strong style="font-size: 20px;">{otp}</strong></p>
-                    <p>This code will expire in 10 minutes.</p>
-                """
-            })
-            print(f"--- [LOG] Resend Success! Response ID: {res} ---", flush=True)
-        except Exception as e:
-            print(f"--- [LOG] Resend API Error: {e} ---", flush=True)
+        # Send via Gmail SMTP
+        send_otp_email(email, otp)
 
     conn.close()
-
-    # Always proceed to verify view to protect against user account enumeration
     return render_template("forgot_password.html", step="verify", email=email)
 
 
-# Step 2 Handler: Verify OTP & Update Password
 @app.route("/verify-reset", methods=["POST"])
 def verify_otp_and_reset():
     email = request.form.get("email", "").strip()
@@ -247,7 +306,9 @@ def verify_otp_and_reset():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    
+    query = "SELECT * FROM users WHERE email = %s" if DATABASE_URL else "SELECT * FROM users WHERE email = ?"
+    cursor.execute(query, (email,))
     user = cursor.fetchone()
 
     if not user:
@@ -255,31 +316,26 @@ def verify_otp_and_reset():
         print("--- [LOG] Verification failed: User not found ---", flush=True)
         return render_template("forgot_password.html", step="verify", email=email, error="Invalid OTP code.")
 
-    print(f"--- [LOG] DB OTP: '{user['otp']}' | DB Expiry: '{user['otp_expiry']}' ---", flush=True)
-
     if not user["otp"] or user["otp"] != otp or not user["otp_expiry"]:
         conn.close()
         print("--- [LOG] Verification failed: Invalid or mismatched OTP ---", flush=True)
         return render_template("forgot_password.html", step="verify", email=email, error="Invalid OTP code.")
 
-    # Check OTP expiration
     expiry_time = datetime.datetime.fromisoformat(user["otp_expiry"])
     if datetime.datetime.now() > expiry_time:
         conn.close()
         print("--- [LOG] Verification failed: OTP expired ---", flush=True)
         return render_template("forgot_password.html", step="verify", email=email, error="OTP code has expired. Please request a new one.")
 
-    # Update password and wipe used OTP
     hashed_password = generate_password_hash(new_password)
-    cursor.execute(
-        "UPDATE users SET password = ?, otp = NULL, otp_expiry = NULL WHERE id = ?",
-        (hashed_password, user["id"])
-    )
+    update_query = "UPDATE users SET password = %s, otp = NULL, otp_expiry = NULL WHERE id = %s" if DATABASE_URL else "UPDATE users SET password = ?, otp = NULL, otp_expiry = NULL WHERE id = ?"
+    cursor.execute(update_query, (hashed_password, user["id"]))
     conn.commit()
     conn.close()
 
-    print("--- [LOG] Password updated successfully! ---", flush=True)
-    return render_template("login.html", error="Password reset successfully. You can log in now.")
+    print("--- [LOG] Password updated successfully! Redirecting to login. ---", flush=True)
+    flash("Password reset successfully. You can log in now.", "success")
+    return redirect(url_for("login"))
 
 
 @app.route("/logout")
@@ -304,17 +360,12 @@ def get_tasks():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],))
+    query = "SELECT * FROM tasks WHERE user_id = %s" if DATABASE_URL else "SELECT * FROM tasks WHERE user_id = ?"
+    cursor.execute(query, (session["user_id"],))
     rows = cursor.fetchall()
     conn.close()
 
-    tasks_data = []
-    for row in rows:
-        tasks_data.append({
-            "id": row["id"],
-            "description": row["description"],
-            "done": bool(row["done"])
-        })
+    tasks_data = [{"id": r["id"], "description": r["description"], "done": bool(r["done"])} for r in rows]
     return jsonify(tasks_data)
 
 
@@ -329,10 +380,8 @@ def add_task():
     if description:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO tasks (user_id, description, done) VALUES (?, ?, 0)",
-            (session["user_id"], description)
-        )
+        query = "INSERT INTO tasks (user_id, description, done) VALUES (%s, %s, 0)" if DATABASE_URL else "INSERT INTO tasks (user_id, description, done) VALUES (?, ?, 0)"
+        cursor.execute(query, (session["user_id"], description))
         conn.commit()
         conn.close()
 
@@ -349,17 +398,13 @@ def toggle_task():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT done FROM tasks WHERE id = ? AND user_id = ?",
-        (task_id, session["user_id"])
-    )
+    sel_query = "SELECT done FROM tasks WHERE id = %s AND user_id = %s" if DATABASE_URL else "SELECT done FROM tasks WHERE id = ? AND user_id = ?"
+    cursor.execute(sel_query, (task_id, session["user_id"]))
     row = cursor.fetchone()
     if row is not None:
         new_done = 0 if row["done"] else 1
-        cursor.execute(
-            "UPDATE tasks SET done = ? WHERE id = ? AND user_id = ?",
-            (new_done, task_id, session["user_id"])
-        )
+        upd_query = "UPDATE tasks SET done = %s WHERE id = %s AND user_id = %s" if DATABASE_URL else "UPDATE tasks SET done = ? WHERE id = ? AND user_id = ?"
+        cursor.execute(upd_query, (new_done, task_id, session["user_id"]))
         conn.commit()
     conn.close()
 
@@ -376,11 +421,9 @@ def delete_tasks():
 
     conn = get_db()
     cursor = conn.cursor()
+    del_query = "DELETE FROM tasks WHERE id = %s AND user_id = %s" if DATABASE_URL else "DELETE FROM tasks WHERE id = ? AND user_id = ?"
     for task_id in ids:
-        cursor.execute(
-            "DELETE FROM tasks WHERE id = ? AND user_id = ?",
-            (task_id, session["user_id"])
-        )
+        cursor.execute(del_query, (task_id, session["user_id"]))
     conn.commit()
     conn.close()
 
@@ -396,19 +439,12 @@ def get_notes():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM notes WHERE user_id = ?", (session["user_id"],))
+    query = "SELECT * FROM notes WHERE user_id = %s" if DATABASE_URL else "SELECT * FROM notes WHERE user_id = ?"
+    cursor.execute(query, (session["user_id"],))
     rows = cursor.fetchall()
     conn.close()
 
-    notes_data = []
-    for row in rows:
-        notes_data.append({
-            "id": row["id"],
-            "title": row["title"],
-            "content": row["content"],
-            "date": row["date"],
-            "time": row["time"]
-        })
+    notes_data = [{"id": r["id"], "title": r["title"], "content": r["content"], "date": r["date"], "time": r["time"]} for r in rows]
     return jsonify(notes_data)
 
 
@@ -425,10 +461,8 @@ def add_note():
         now = datetime.datetime.now()
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO notes (user_id, title, content, date, time) VALUES (?, ?, ?, ?, ?)",
-            (session["user_id"], title, content, str(now.date()), str(now.time()))
-        )
+        query = "INSERT INTO notes (user_id, title, content, date, time) VALUES (%s, %s, %s, %s, %s)" if DATABASE_URL else "INSERT INTO notes (user_id, title, content, date, time) VALUES (?, ?, ?, ?, ?)"
+        cursor.execute(query, (session["user_id"], title, content, str(now.date()), str(now.time())))
         conn.commit()
         conn.close()
 
@@ -445,11 +479,9 @@ def delete_notes():
 
     conn = get_db()
     cursor = conn.cursor()
+    del_query = "DELETE FROM notes WHERE id = %s AND user_id = %s" if DATABASE_URL else "DELETE FROM notes WHERE id = ? AND user_id = ?"
     for note_id in ids:
-        cursor.execute(
-            "DELETE FROM notes WHERE id = ? AND user_id = ?",
-            (note_id, session["user_id"])
-        )
+        cursor.execute(del_query, (note_id, session["user_id"]))
     conn.commit()
     conn.close()
 

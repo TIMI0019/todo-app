@@ -178,26 +178,38 @@ def forgot_password():
 @app.route("/request-otp", methods=["POST"])
 def request_otp():
     email = request.form.get("email", "").strip()
+    print(f"\n--- [LOG] Reset request received for email: '{email}' ---", flush=True)
 
     if not email:
+        print("--- [LOG] Error: Email parameter missing ---", flush=True)
         return render_template("forgot_password.html", step="request", error="Email is required.")
+
+    # Verify if RESEND_API_KEY is configured
+    if not RESEND_API_KEY:
+        print("--- [LOG] WARNING: RESEND_API_KEY is not set in environment variables! ---", flush=True)
 
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
     user = cursor.fetchone()
 
-    if user:
+    if not user:
+        print(f"--- [LOG] DB Check: No account found matching email '{email}' ---", flush=True)
+    else:
+        print(f"--- [LOG] DB Check: Found user '{user['username']}' (ID: {user['id']}) ---", flush=True)
+        
         # Generate 6-digit numeric OTP and set 10-minute expiry
         otp = f"{secrets.randbelow(1000000):06d}"
         expiry = (datetime.datetime.now() + datetime.timedelta(minutes=10)).isoformat()
 
         cursor.execute("UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?", (otp, expiry, user["id"]))
         conn.commit()
+        print(f"--- [LOG] Generated OTP: {otp} | Expiry: {expiry} ---", flush=True)
 
         # Send Email via Resend
+        print(f"--- [LOG] Sending email to '{email}' via Resend API... ---", flush=True)
         try:
-            resend.Emails.send({
+            res = resend.Emails.send({
                 "from": "onboarding@resend.dev",
                 "to": [email],
                 "subject": "Your Doneify Password Reset Code",
@@ -207,8 +219,9 @@ def request_otp():
                     <p>This code will expire in 10 minutes.</p>
                 """
             })
+            print(f"--- [LOG] Resend Success! Response ID: {res} ---", flush=True)
         except Exception as e:
-            print(f"Resend sending error: {e}")
+            print(f"--- [LOG] Resend API Error: {e} ---", flush=True)
 
     conn.close()
 
@@ -224,6 +237,8 @@ def verify_otp_and_reset():
     new_password = request.form.get("new_password", "")
     confirm_password = request.form.get("confirm_password", "")
 
+    print(f"\n--- [LOG] OTP Verification attempt for email: '{email}' | Entered OTP: '{otp}' ---", flush=True)
+
     if new_password != confirm_password:
         return render_template("forgot_password.html", step="verify", email=email, error="Passwords do not match.")
 
@@ -235,14 +250,23 @@ def verify_otp_and_reset():
     cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
     user = cursor.fetchone()
 
-    if not user or not user["otp"] or user["otp"] != otp or not user["otp_expiry"]:
+    if not user:
         conn.close()
+        print("--- [LOG] Verification failed: User not found ---", flush=True)
+        return render_template("forgot_password.html", step="verify", email=email, error="Invalid OTP code.")
+
+    print(f"--- [LOG] DB OTP: '{user['otp']}' | DB Expiry: '{user['otp_expiry']}' ---", flush=True)
+
+    if not user["otp"] or user["otp"] != otp or not user["otp_expiry"]:
+        conn.close()
+        print("--- [LOG] Verification failed: Invalid or mismatched OTP ---", flush=True)
         return render_template("forgot_password.html", step="verify", email=email, error="Invalid OTP code.")
 
     # Check OTP expiration
     expiry_time = datetime.datetime.fromisoformat(user["otp_expiry"])
     if datetime.datetime.now() > expiry_time:
         conn.close()
+        print("--- [LOG] Verification failed: OTP expired ---", flush=True)
         return render_template("forgot_password.html", step="verify", email=email, error="OTP code has expired. Please request a new one.")
 
     # Update password and wipe used OTP
@@ -254,6 +278,7 @@ def verify_otp_and_reset():
     conn.commit()
     conn.close()
 
+    print("--- [LOG] Password updated successfully! ---", flush=True)
     return render_template("login.html", error="Password reset successfully. You can log in now.")
 
 

@@ -26,9 +26,9 @@ DB_FILE = "todo.db"
 
 # --- Helper Functions ---
 def send_otp_email(to_email, otp):
-    """Sends an OTP email using Gmail SMTP."""
+    """Sends an OTP email using Gmail SMTP over SSL (Port 465)."""
     if not MAIL_USERNAME or not MAIL_PASSWORD:
-        print("--- [LOG] WARNING: MAIL_USERNAME or MAIL_PASSWORD not set in environment! ---", flush=True)
+        print("--- [LOG] WARNING: MAIL_USERNAME or MAIL_PASSWORD environment variables not set! ---", flush=True)
         return False
 
     msg = MIMEMultipart("alternative")
@@ -44,11 +44,11 @@ def send_otp_email(to_email, otp):
     msg.attach(MIMEText(html_content, "html"))
 
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
+        # Use Port 465 (SSL) with a 10-second timeout to avoid worker timeouts
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
             server.login(MAIL_USERNAME, MAIL_PASSWORD)
             server.sendmail(MAIL_USERNAME, [to_email], msg.as_string())
-        print(f"--- [LOG] Gmail SMTP Success! Code sent to: {to_email} ---", flush=True)
+        print(f"--- [LOG] Gmail SMTP Success! Email sent to: {to_email} ---", flush=True)
         return True
     except Exception as e:
         print(f"--- [LOG] Gmail SMTP Error: {e} ---", flush=True)
@@ -282,7 +282,7 @@ def request_otp():
         conn.commit()
         print(f"--- [LOG] Generated OTP: {otp} | Expiry: {expiry} ---", flush=True)
 
-        # Send via Gmail SMTP
+        # Send via Gmail SMTP (SSL Port 465)
         send_otp_email(email, otp)
 
     conn.close()

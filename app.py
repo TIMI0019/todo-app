@@ -2,11 +2,37 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, s
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 import datetime
+import os
+import re
+import secrets
+import resend  # Resend SDK for transactional emails
 
+# --- App Setup ---
 app = Flask(__name__)
-app.secret_key = "change-this-to-something-random-and-secret"
+app.secret_key = os.environ.get("SECRET_KEY", "dev-fallback-key")
+app.permanent_session_lifetime = datetime.timedelta(days=30)
+
+# Configure Resend API Key
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+resend.api_key = RESEND_API_KEY
 
 DB_FILE = "todo.db"
+
+
+# --- Helper Functions ---
+def is_password_strong(password):
+    """At least 8 chars, one uppercase, one lowercase, one digit, one special character."""
+    if len(password) < 8:
+        return False
+    if not re.search(r"[A-Z]", password):
+        return False
+    if not re.search(r"[a-z]", password):
+        return False
+    if not re.search(r"[0-9]", password):
+        return False
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return False
+    return True
 
 
 def get_db():
@@ -26,6 +52,19 @@ def init_db():
             password TEXT NOT NULL
         )
     """)
+
+    # Safely add optional/newer columns
+    columns_to_add = [
+        ("email", "TEXT"),
+        ("phone", "TEXT"),
+        ("otp", "TEXT"),
+        ("otp_expiry", "TEXT")
+    ]
+    for col_name, col_type in columns_to_add:
+        try:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
@@ -61,16 +100,25 @@ def login_required_json():
     return "user_id" not in session
 
 
-# ---------- Auth routes ----------
+# ---------- Auth Routes ----------
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        phone = request.form.get("phone", "").strip()
         password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
 
-        if not username or not password:
-            return render_template("signup.html", error="Username and password are required.")
+        if not username or not email or not password:
+            return render_template("signup.html", error="Username, email, and password are required.")
+
+        if password != confirm_password:
+            return render_template("signup.html", error="Passwords do not match.")
+
+        if not is_password_strong(password):
+            return render_template("signup.html", error="Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.")
 
         hashed_password = generate_password_hash(password)
 
@@ -78,8 +126,8 @@ def signup():
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "INSERT INTO users (username, password) VALUES (?, ?)",
-                (username, hashed_password)
+                "INSERT INTO users (username, password, email, phone) VALUES (?, ?, ?, ?)",
+                (username, hashed_password, email, phone)
             )
             conn.commit()
         except sqlite3.IntegrityError:
@@ -101,6 +149,7 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
+        remember_me = request.form.get("remember_me")
 
         conn = get_db()
         cursor = conn.cursor()
@@ -111,11 +160,101 @@ def login():
         if user is None or not check_password_hash(user["password"], password):
             return render_template("login.html", error="Incorrect username or password.")
 
+        session.permanent = bool(remember_me)
         session["user_id"] = user["id"]
         session["username"] = user["username"]
         return redirect(url_for("home"))
 
     return render_template("login.html")
+
+
+# Step 1: Render Request Page
+@app.route("/forgot-password", methods=["GET"])
+def forgot_password():
+    return render_template("forgot_password.html", step="request")
+
+
+# Step 1 Handler: Generate & Send OTP Email
+@app.route("/request-otp", methods=["POST"])
+def request_otp():
+    email = request.form.get("email", "").strip()
+
+    if not email:
+        return render_template("forgot_password.html", step="request", error="Email is required.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+
+    if user:
+        # Generate 6-digit numeric OTP and set 10-minute expiry
+        otp = f"{secrets.randbelow(1000000):06d}"
+        expiry = (datetime.datetime.now() + datetime.timedelta(minutes=10)).isoformat()
+
+        cursor.execute("UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?", (otp, expiry, user["id"]))
+        conn.commit()
+
+        # Send Email via Resend
+        try:
+            resend.Emails.send({
+                "from": "onboarding@resend.dev",
+                "to": [email],
+                "subject": "Your Doneify Password Reset Code",
+                "html": f"""
+                    <h3>Password Reset Request</h3>
+                    <p>Your 6-digit verification code is: <strong style="font-size: 20px;">{otp}</strong></p>
+                    <p>This code will expire in 10 minutes.</p>
+                """
+            })
+        except Exception as e:
+            print(f"Resend sending error: {e}")
+
+    conn.close()
+
+    # Always proceed to verify view to protect against user account enumeration
+    return render_template("forgot_password.html", step="verify", email=email)
+
+
+# Step 2 Handler: Verify OTP & Update Password
+@app.route("/verify-reset", methods=["POST"])
+def verify_otp_and_reset():
+    email = request.form.get("email", "").strip()
+    otp = request.form.get("otp", "").strip()
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if new_password != confirm_password:
+        return render_template("forgot_password.html", step="verify", email=email, error="Passwords do not match.")
+
+    if not is_password_strong(new_password):
+        return render_template("forgot_password.html", step="verify", email=email, error="Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+
+    if not user or not user["otp"] or user["otp"] != otp or not user["otp_expiry"]:
+        conn.close()
+        return render_template("forgot_password.html", step="verify", email=email, error="Invalid OTP code.")
+
+    # Check OTP expiration
+    expiry_time = datetime.datetime.fromisoformat(user["otp_expiry"])
+    if datetime.datetime.now() > expiry_time:
+        conn.close()
+        return render_template("forgot_password.html", step="verify", email=email, error="OTP code has expired. Please request a new one.")
+
+    # Update password and wipe used OTP
+    hashed_password = generate_password_hash(new_password)
+    cursor.execute(
+        "UPDATE users SET password = ?, otp = NULL, otp_expiry = NULL WHERE id = ?",
+        (hashed_password, user["id"])
+    )
+    conn.commit()
+    conn.close()
+
+    return render_template("login.html", error="Password reset successfully. You can log in now.")
 
 
 @app.route("/logout")
@@ -131,7 +270,7 @@ def home():
     return render_template("index.html", username=session["username"])
 
 
-# ---------- Task routes ----------
+# ---------- Task Routes ----------
 
 @app.route("/api/tasks")
 def get_tasks():
@@ -223,7 +362,7 @@ def delete_tasks():
     return get_tasks()
 
 
-# ---------- Note routes ----------
+# ---------- Note Routes ----------
 
 @app.route("/api/notes")
 def get_notes():

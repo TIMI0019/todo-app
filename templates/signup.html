@@ -44,28 +44,43 @@
   { color: var(--pending-text); font-size: 13px; margin-bottom: 12px; }
   .auth-link { font-size: 13px; margin-top: 12px; color: var(--text-muted); }
   .auth-link a { color: var(--accent); }
-  .password-field { position: relative; }
-  .password-field input { padding-right: 42px; }
+ 
+  .password-field {
+  position: relative;
+  width: 100%;
+}
 
-  .password-toggle {
-    position: absolute;
-    left: 200px;
-    top: 15px;
-    left: 180px;
-    height: 10px;
-    padding: 0;
-    background: none !important;
-    border: none;
-    box-shadow: none;
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 4px 6px;
+.password-field input {
+  width: 100%;
+  padding-right: 42px;
+  box-sizing: border-box;
+}
 
-  }
+.password-toggle {
+  position: absolute;
+  top: 40%;
+  right: 10px;
+  transform: translateY(-50%);
 
+  width: 24px !important;
+  height: 24px !important;
+
+  padding: 0 !important;
+  margin: 0 !important;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
   .signup-button {
     width: 100%;
     padding: 10px;

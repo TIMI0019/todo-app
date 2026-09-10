@@ -460,3 +460,9 @@ li.item .delete:hover { opacity: 1; }
 
 
 }
+.auth-box input[type="text"]:focus,
+.auth-box input[type="password"]:focus {
+    outline: none !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+}

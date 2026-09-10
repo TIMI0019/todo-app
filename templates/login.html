@@ -14,6 +14,7 @@
     min-height: 100vh;
     width: 100%;
     padding: 1rem;
+    border: 1px solid var(--border);
   }
   .auth-box {
     background: var(--panel);
@@ -40,24 +41,55 @@
     width: 80px;
     height: auto;
   }
+.password-field {
+  position: relative;
+  width: 100%;
+}
 
-  .password-field { position: relative; }
-  .password-field input { padding-right: 42px; }
-  .password-toggle {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none !important;
-    border: none;
-    box-shadow: none;
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 14px;
-    padding: 0;
-    width: auto;
-    height: auto;
-  }
+.password-field input {
+  width: 100%;
+  padding-right: 42px;
+  box-sizing: border-box;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 40%;
+  right: 10px;
+  transform: translateY(-50%);
+
+  width: 24px !important;
+  height: 24px !important;
+
+  padding: 0 !important;
+  margin: 0 !important;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: transparent !important;
+
+  /* THIS removes the circle */
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.password-toggle:hover,
+.password-toggle:focus,
+.password-toggle:active {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
 
   .remember-row {
     display: flex;

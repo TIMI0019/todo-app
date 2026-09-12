@@ -100,6 +100,21 @@ def init_db():
                 photo VARCHAR(255)
             );
         """)
+
+        # Auto-migrate missing columns for PostgreSQL
+        pg_columns = [
+            ("email", "VARCHAR(255)"),
+            ("phone", "VARCHAR(50)"),
+            ("otp", "VARCHAR(10)"),
+            ("otp_expiry", "VARCHAR(100)"),
+            ("photo", "VARCHAR(255)")
+        ]
+        for col_name, col_type in pg_columns:
+            try:
+                cursor.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col_name} {col_type};")
+            except Exception as e:
+                print(f"PG Column migration notice: {e}", flush=True)
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
                 id SERIAL PRIMARY KEY,
@@ -537,6 +552,7 @@ def upload_photo():
     conn.close()
 
     return jsonify({"photo": photo_path})
+
 
 @app.route("/api/profile/photo/remove", methods=["POST"])
 def remove_photo():

@@ -10,6 +10,7 @@ import secrets
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from werkzeug.utils import secure_filename
 
 # --- App Setup ---
 app = Flask(__name__)
@@ -22,6 +23,10 @@ MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
 
 DB_FILE = "todo.db"
+
+UPLOAD_FOLDER = os.path.join("static", "uploads")
+ALLOWED_PHOTO_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # --- Helper Functions ---
@@ -44,7 +49,6 @@ def send_otp_email(to_email, otp):
     msg.attach(MIMEText(html_content, "html"))
 
     try:
-        # Use Port 465 (SSL) with a 10-second timeout to avoid worker timeouts
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
             server.login(MAIL_USERNAME, MAIL_PASSWORD)
             server.sendmail(MAIL_USERNAME, [to_email], msg.as_string())
@@ -72,11 +76,9 @@ def is_password_strong(password):
 
 def get_db():
     if DATABASE_URL:
-        # PostgreSQL for Render production
         conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
         return conn
     else:
-        # SQLite for local development
         conn = sqlite3.connect(DB_FILE)
         conn.row_factory = sqlite3.Row
         return conn
@@ -94,7 +96,8 @@ def init_db():
                 email VARCHAR(255),
                 phone VARCHAR(50),
                 otp VARCHAR(10),
-                otp_expiry VARCHAR(100)
+                otp_expiry VARCHAR(100),
+                photo VARCHAR(255)
             );
         """)
         cursor.execute("""
@@ -131,7 +134,8 @@ def init_db():
             ("email", "TEXT"),
             ("phone", "TEXT"),
             ("otp", "TEXT"),
-            ("otp_expiry", "TEXT")
+            ("otp_expiry", "TEXT"),
+            ("photo", "TEXT")
         ]
         for col_name, col_type in columns_to_add:
             try:
@@ -232,7 +236,7 @@ def login():
 
         conn = get_db()
         cursor = conn.cursor()
-        
+
         query = "SELECT * FROM users WHERE username = %s" if DATABASE_URL else "SELECT * FROM users WHERE username = ?"
         cursor.execute(query, (username,))
         user = cursor.fetchone()
@@ -264,7 +268,7 @@ def request_otp():
 
     conn = get_db()
     cursor = conn.cursor()
-    
+
     query = "SELECT * FROM users WHERE email = %s" if DATABASE_URL else "SELECT * FROM users WHERE email = ?"
     cursor.execute(query, (email,))
     user = cursor.fetchone()
@@ -273,7 +277,7 @@ def request_otp():
         print(f"--- [LOG] DB Check: No account found matching email '{email}' ---", flush=True)
     else:
         print(f"--- [LOG] DB Check: Found user '{user['username']}' (ID: {user['id']}) ---", flush=True)
-        
+
         otp = f"{secrets.randbelow(1000000):06d}"
         expiry = (datetime.datetime.now() + datetime.timedelta(minutes=10)).isoformat()
 
@@ -282,7 +286,6 @@ def request_otp():
         conn.commit()
         print(f"--- [LOG] Generated OTP: {otp} | Expiry: {expiry} ---", flush=True)
 
-        # Send via Gmail SMTP (SSL Port 465)
         send_otp_email(email, otp)
 
     conn.close()
@@ -306,7 +309,7 @@ def verify_otp_and_reset():
 
     conn = get_db()
     cursor = conn.cursor()
-    
+
     query = "SELECT * FROM users WHERE email = %s" if DATABASE_URL else "SELECT * FROM users WHERE email = ?"
     cursor.execute(query, (email,))
     user = cursor.fetchone()
@@ -348,7 +351,21 @@ def logout():
 def home():
     if "user_id" not in session:
         return redirect(url_for("login"))
-    return render_template("index.html", username=session["username"])
+
+    conn = get_db()
+    cursor = conn.cursor()
+    query = "SELECT * FROM users WHERE id = %s" if DATABASE_URL else "SELECT * FROM users WHERE id = ?"
+    cursor.execute(query, (session["user_id"],))
+    user = cursor.fetchone()
+    conn.close()
+
+    return render_template(
+        "index.html",
+        username=user["username"],
+        email=user["email"] or "",
+        phone=user["phone"] or "",
+        photo=user["photo"]
+    )
 
 
 # ---------- Task Routes ----------
@@ -486,6 +503,63 @@ def delete_notes():
     conn.close()
 
     return get_notes()
+
+
+# ---------- Profile Routes ----------
+
+@app.route("/api/profile/photo", methods=["POST"])
+def upload_photo():
+    if login_required_json():
+        return jsonify({"error": "Not logged in"}), 401
+
+    if "photo" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["photo"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+
+    extension = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if extension not in ALLOWED_PHOTO_EXTENSIONS:
+        return jsonify({"error": "Unsupported file type"}), 400
+
+    filename = secure_filename(f"user_{session['user_id']}.{extension}")
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(filepath)
+
+    photo_path = f"uploads/{filename}"
+
+    conn = get_db()
+    cursor = conn.cursor()
+    query = "UPDATE users SET photo = %s WHERE id = %s" if DATABASE_URL else "UPDATE users SET photo = ? WHERE id = ?"
+    cursor.execute(query, (photo_path, session["user_id"]))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"photo": photo_path})
+
+@app.route("/api/profile/photo/remove", methods=["POST"])
+def remove_photo():
+    if login_required_json():
+        return jsonify({"error": "Not logged in"}), 401
+
+    conn = get_db()
+    cursor = conn.cursor()
+    query = "SELECT photo FROM users WHERE id = %s" if DATABASE_URL else "SELECT photo FROM users WHERE id = ?"
+    cursor.execute(query, (session["user_id"],))
+    user = cursor.fetchone()
+
+    if user and user["photo"]:
+        filepath = os.path.join("static", user["photo"])
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+    update_query = "UPDATE users SET photo = NULL WHERE id = %s" if DATABASE_URL else "UPDATE users SET photo = NULL WHERE id = ?"
+    cursor.execute(update_query, (session["user_id"],))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"removed": True})
 
 
 if __name__ == "__main__":

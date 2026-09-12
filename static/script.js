@@ -223,4 +223,71 @@ document.getElementById('nextMonth').addEventListener('click', () => {
   renderCalendar();
 });
 
+
+// ---------- Account panel (hamburger menu) ----------
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const accountPanel = document.getElementById('accountPanel');
+const accountOverlay = document.getElementById('accountOverlay');
+const accountClose = document.getElementById('accountClose');
+
+function openAccountPanel() {
+  accountPanel.classList.add('open');
+  accountOverlay.classList.add('open');
+}
+
+function closeAccountPanel() {
+  accountPanel.classList.remove('open');
+  accountOverlay.classList.remove('open');
+}
+
+hamburgerBtn.addEventListener('click', openAccountPanel);
+accountClose.addEventListener('click', closeAccountPanel);
+accountOverlay.addEventListener('click', closeAccountPanel);
+
+// ---------- Profile photo upload ----------
+const photoInput = document.getElementById('photoInput');
+const accountPhotoImg = document.getElementById('accountPhotoImg');
+
+photoInput.addEventListener('change', () => {
+  const file = photoInput.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('photo', file);
+
+  fetch('/api/profile/photo', {
+    method: 'POST',
+    body: formData
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.photo) {
+        const newImg = document.createElement('img');
+        newImg.src = '/static/' + data.photo + '?t=' + Date.now();
+        newImg.alt = 'Profile photo';
+        newImg.className = 'account-photo';
+        newImg.id = 'accountPhotoImg';
+        accountPhotoImg.replaceWith(newImg);
+      }
+    });
+});
+
+const removePhotoBtn = document.getElementById('removePhotoBtn');
+
+removePhotoBtn.addEventListener('click', () => {
+  fetch('/api/profile/photo/remove', {
+    method: 'POST'
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.removed) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'account-photo account-photo-placeholder';
+        placeholder.id = 'accountPhotoImg';
+        placeholder.textContent = document.querySelector('.account-username').textContent.trim()[0].toUpperCase();
+        document.getElementById('accountPhotoImg').replaceWith(placeholder);
+      }
+    });
+});
+
 renderCalendar();

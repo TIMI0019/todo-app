@@ -7,9 +7,7 @@ import datetime
 import os
 import re
 import secrets
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import resend
 from werkzeug.utils import secure_filename
 
 # --- App Setup ---
@@ -17,10 +15,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-fallback-key")
 app.permanent_session_lifetime = datetime.timedelta(days=30)
 
-# Environment variables for database and Gmail SMTP
+# Environment variables for database and Resend API
 DATABASE_URL = os.environ.get("DATABASE_URL")
-MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
-MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
+resend.api_key = os.environ.get("RESEND_API_KEY")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "noreply@yourdomain.com")
 
 DB_FILE = "todo.db"
 
@@ -31,31 +29,30 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # --- Helper Functions ---
 def send_otp_email(to_email, otp):
-    """Sends an OTP email using Gmail SMTP over SSL (Port 465)."""
-    if not MAIL_USERNAME or not MAIL_PASSWORD:
-        print("--- [LOG] WARNING: MAIL_USERNAME or MAIL_PASSWORD environment variables not set! ---", flush=True)
+    """Sends an OTP email using the Resend HTTPS API (bypasses Render SMTP port blocks)."""
+    if not resend.api_key:
+        print("--- [LOG] WARNING: RESEND_API_KEY environment variable not set! ---", flush=True)
         return False
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Your Doneify Password Reset Code"
-    msg["From"] = f"Doneify <{MAIL_USERNAME}>"
-    msg["To"] = to_email
 
     html_content = f"""
         <h3>Password Reset Request</h3>
         <p>Your 6-digit verification code is: <strong style="font-size: 20px;">{otp}</strong></p>
         <p>This code will expire in 10 minutes.</p>
     """
-    msg.attach(MIMEText(html_content, "html"))
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
-            server.login(MAIL_USERNAME, MAIL_PASSWORD)
-            server.sendmail(MAIL_USERNAME, [to_email], msg.as_string())
-        print(f"--- [LOG] Gmail SMTP Success! Email sent to: {to_email} ---", flush=True)
+        params = {
+            "from": f"Doneify <{SENDER_EMAIL}>",
+            "to": [to_email],
+            "subject": "Your Doneify Password Reset Code",
+            "html": html_content,
+        }
+
+        email_response = resend.Emails.send(params)
+        print(f"--- [LOG] Resend API Success! Email sent to: {to_email} | ID: {email_response.get('id')} ---", flush=True)
         return True
     except Exception as e:
-        print(f"--- [LOG] Gmail SMTP Error: {e} ---", flush=True)
+        print(f"--- [LOG] Resend API Error: {e} ---", flush=True)
         return False
 
 

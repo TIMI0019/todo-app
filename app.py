@@ -18,8 +18,7 @@ app.permanent_session_lifetime = datetime.timedelta(days=30)
 # Environment variables for database and Resend API
 DATABASE_URL = os.environ.get("DATABASE_URL")
 resend.api_key = os.environ.get("RESEND_API_KEY")
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "noreply@yourdomain.com")
-
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 DB_FILE = "todo.db"
 
 UPLOAD_FOLDER = os.path.join("static", "uploads")
